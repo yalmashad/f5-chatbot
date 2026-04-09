@@ -22,11 +22,18 @@ COMMON_OPENAI_MODELS = (
     "gpt-4.1-mini",
     "gpt-4.1",
 )
+DEFAULT_GUARDRAIL_HOSTNAME = "https://www.us1.calypsoai.app"
+GUARDRAIL_SCAN_PATH = "/backend/v1/scans"
+GUARDRAIL_PROMPT_API_PATH = "/backend/v1/prompts"
 
 
 def require_env(var_name: str, var_value: str | None) -> None:
     if not var_value:
         raise RuntimeError(f"Missing {var_name} in environment (.env).")
+
+
+def build_guardrail_url(hostname: str, path: str) -> str:
+    return f"{hostname.rstrip('/')}{path}"
 
 
 def load_app_config() -> dict[str, str]:
@@ -46,7 +53,22 @@ def load_app_config() -> dict[str, str]:
         or DEFAULT_OLLAMA_BASE_URL
     )
 
-    f5ai_api_key = env.get("F5AI_API_KEY") or os.getenv("F5AI_API_KEY") or ""
+    guardrail_api_key = env.get("GUARDRAIL_API_KEY") or os.getenv("GUARDRAIL_API_KEY") or ""
+    guardrail_hostname = (
+        env.get("GUARDRAIL_HOSTNAME")
+        or os.getenv("GUARDRAIL_HOSTNAME")
+        or DEFAULT_GUARDRAIL_HOSTNAME
+    )
+    guardrail_scan_url = (
+        env.get("GUARDRAIL_SCAN_URL")
+        or os.getenv("GUARDRAIL_SCAN_URL")
+        or build_guardrail_url(guardrail_hostname, GUARDRAIL_SCAN_PATH)
+    )
+    guardrail_prompt_api_url = (
+        env.get("GUARDRAIL_PROMPT_API_URL")
+        or os.getenv("GUARDRAIL_PROMPT_API_URL")
+        or build_guardrail_url(guardrail_hostname, GUARDRAIL_PROMPT_API_PATH)
+    )
 
     return {
         "model_provider": provider,
@@ -54,17 +76,10 @@ def load_app_config() -> dict[str, str]:
         "openai_model": openai_model,
         "ollama_model": ollama_model,
         "ollama_base_url": ollama_base_url,
-        "f5ai_api_key": f5ai_api_key,
-        "f5_guardrail_scan_url": (
-            env.get("CALYPSO_SCAN_URL")
-            or os.getenv("CALYPSO_SCAN_URL")
-            or "https://www.us1.calypsoai.app/backend/v1/scans"
-        ),
-        "f5_guardrail_prompt_api_url": (
-            env.get("CALYPSO_PROMPT_API_URL")
-            or os.getenv("CALYPSO_PROMPT_API_URL")
-            or "https://www.us1.calypsoai.app/backend/v1/prompts"
-        ),
+        "guardrail_api_key": guardrail_api_key,
+        "guardrail_hostname": guardrail_hostname,
+        "guardrail_scan_url": guardrail_scan_url,
+        "guardrail_prompt_api_url": guardrail_prompt_api_url,
     }
 
 
@@ -77,7 +92,14 @@ def persist_settings(config: dict[str, str]) -> None:
         "OPENAI_MODEL": config["openai_model"],
         "OLLAMA_MODEL": config["ollama_model"],
         "OLLAMA_BASE_URL": config["ollama_base_url"],
-        "F5AI_API_KEY": config["f5ai_api_key"],
+        "GUARDRAIL_API_KEY": config["guardrail_api_key"],
+        "GUARDRAIL_HOSTNAME": config["guardrail_hostname"],
+        "GUARDRAIL_SCAN_URL": build_guardrail_url(
+            config["guardrail_hostname"], GUARDRAIL_SCAN_PATH
+        ),
+        "GUARDRAIL_PROMPT_API_URL": build_guardrail_url(
+            config["guardrail_hostname"], GUARDRAIL_PROMPT_API_PATH
+        ),
     }
 
     for key, value in values_to_save.items():
@@ -148,7 +170,7 @@ def cai_scanapi(
     """
     F5 Guardrail Scan API: returns (cleared?, full_json_or_none).
     """
-    require_env("F5AI_API_KEY", api_key)
+    require_env("GUARDRAIL_API_KEY", api_key)
 
     try:
         resp = requests.post(
@@ -182,7 +204,7 @@ def cai_promptapi(prompt: str, api_key: str, prompt_api_url: str) -> tuple[str |
     """
     F5 Guardrail Prompt API (Inline): returns (assistant_text_or_none, full_json).
     """
-    require_env("F5AI_API_KEY", api_key)
+    require_env("GUARDRAIL_API_KEY", api_key)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -276,15 +298,16 @@ with st.sidebar:
             key="settings_model_provider",
         )
 
-        with st.form("settings_form"):
-
+        with st.form("settings_form", enter_to_submit=False):
             openai_model = settings["openai_model"]
             openai_api_key = settings["openai_api_key"]
             ollama_model = settings["ollama_model"]
             ollama_base_url = settings["ollama_base_url"]
-            f5ai_api_key = settings["f5ai_api_key"]
+            guardrail_api_key = settings["guardrail_api_key"]
+            guardrail_hostname = settings["guardrail_hostname"]
 
             with st.container(border=True):
+                st.subheader("Model Provider")
                 if model_provider == "OpenAI":
                     openai_model_options = list(COMMON_OPENAI_MODELS)
                     use_custom_openai = settings["openai_model"] not in openai_model_options
@@ -369,9 +392,14 @@ with st.sidebar:
 
             with st.container(border=True):
                 st.subheader("F5 Guardrail")
-                f5ai_api_key = st.text_input(
+                guardrail_hostname = st.text_input(
+                    "Guardrail Hostname",
+                    value=settings["guardrail_hostname"],
+                    help="Example: https://www.us1.calypsoai.app",
+                )
+                guardrail_api_key = st.text_input(
                     "F5 Guardrail API key",
-                    value=settings["f5ai_api_key"],
+                    value=settings["guardrail_api_key"],
                     type="password",
                 )
 
@@ -387,7 +415,8 @@ with st.sidebar:
                 "openai_api_key": openai_api_key.strip(),
                 "ollama_model": ollama_model.strip() or DEFAULT_OLLAMA_MODEL,
                 "ollama_base_url": ollama_base_url.strip() or DEFAULT_OLLAMA_BASE_URL,
-                "f5ai_api_key": f5ai_api_key.strip(),
+                "guardrail_api_key": guardrail_api_key.strip(),
+                "guardrail_hostname": guardrail_hostname.strip() or DEFAULT_GUARDRAIL_HOSTNAME,
             }
             persist_settings(updated_settings)
             st.success("Settings saved to .env")
@@ -451,8 +480,8 @@ if prompt:
         try:
             assistant_text, cai_json = cai_promptapi(
                 prompt,
-                settings["f5ai_api_key"],
-                settings["f5_guardrail_prompt_api_url"],
+                settings["guardrail_api_key"],
+                settings["guardrail_prompt_api_url"],
             )
         except Exception as e:
             assistant_text, cai_json = None, {"error": str(e)}
@@ -477,8 +506,8 @@ if prompt:
     try:
         cleared_in, scan_in_json = cai_scanapi(
             prompt,
-            settings["f5ai_api_key"],
-            settings["f5_guardrail_scan_url"],
+            settings["guardrail_api_key"],
+            settings["guardrail_scan_url"],
         )
         if not cleared_in:
             with st.chat_message("assistant"):
@@ -497,8 +526,8 @@ if prompt:
 
         cleared_out, scan_out_json = cai_scanapi(
             response_text,
-            settings["f5ai_api_key"],
-            settings["f5_guardrail_scan_url"],
+            settings["guardrail_api_key"],
+            settings["guardrail_scan_url"],
         )
         if not cleared_out:
             with st.chat_message("assistant"):
