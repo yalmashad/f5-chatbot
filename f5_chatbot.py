@@ -453,10 +453,9 @@ with st.sidebar:
             with st.container(border=True):
                 st.subheader("Model Provider")
                 if model_provider == "OpenAI":
-                    openai_model_options = list(COMMON_OPENAI_MODELS)
+                    openai_model_options = list(COMMON_OPENAI_MODELS) + [OTHER_MODEL_OPTION]
                     use_custom_openai = settings["openai_model"] not in openai_model_options
                     if use_custom_openai:
-                        openai_model_options.append(OTHER_MODEL_OPTION)
                         openai_model_index = len(openai_model_options) - 1
                     else:
                         openai_model_index = openai_model_options.index(settings["openai_model"])
