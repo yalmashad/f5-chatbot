@@ -6,19 +6,29 @@ from pathlib import Path
 import requests
 import streamlit as st
 from docx import Document
-from dotenv import dotenv_values, load_dotenv, set_key
+from dotenv import dotenv_values, load_dotenv
 from openai import OpenAI
 from pypdf import PdfReader
+
+from app_settings import (
+    DEFAULT_COMPATIBLE_BASE_URL,
+    DEFAULT_COMPATIBLE_MODEL,
+    DEFAULT_GUARDRAIL_HOSTNAME,
+    DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    get_available_model_providers,
+    get_selected_model,
+    reset_session_settings,
+    seed_session_settings,
+    update_session_settings,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 load_dotenv(dotenv_path=ENV_PATH, override=True)
 
-DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
-DEFAULT_OLLAMA_MODEL = "llama3.2"
-DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
-MODEL_PROVIDERS = ("OpenAI", "Ollama")
 COMMON_OPENAI_MODELS = (
     "gpt-3.5-turbo",
     "gpt-4o-mini",
@@ -26,9 +36,6 @@ COMMON_OPENAI_MODELS = (
     "gpt-4.1-mini",
     "gpt-4.1",
 )
-DEFAULT_GUARDRAIL_HOSTNAME = "https://www.us1.calypsoai.app"
-GUARDRAIL_SCAN_PATH = "/backend/v1/scans"
-GUARDRAIL_PROMPT_API_PATH = "/backend/v1/prompts"
 MAX_DOCUMENT_FILE_BYTES = 10 * 1024 * 1024
 MAX_EXTRACTED_TEXT_CHARS = 100_000
 SUPPORTED_DOCUMENT_EXTENSIONS = (".pdf", ".docx")
@@ -193,88 +200,18 @@ def redact_sensitive_debug_data(value, sensitive_values: list[str] | None):
 
 def require_env(var_name: str, var_value: str | None) -> None:
     if not var_value:
-        raise RuntimeError(f"Missing {var_name} in environment (.env).")
-
-
-def build_guardrail_url(hostname: str, path: str) -> str:
-    return f"{hostname.rstrip('/')}{path}"
-
-
-def load_app_config() -> dict[str, str]:
-    env = dotenv_values(ENV_PATH)
-
-    provider = env.get("MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "OpenAI"
-    if provider not in MODEL_PROVIDERS:
-        provider = "OpenAI"
-
-    openai_api_key = env.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
-    openai_model = env.get("OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
-
-    ollama_model = env.get("OLLAMA_MODEL") or os.getenv("OLLAMA_MODEL") or DEFAULT_OLLAMA_MODEL
-    ollama_base_url = (
-        env.get("OLLAMA_BASE_URL")
-        or os.getenv("OLLAMA_BASE_URL")
-        or DEFAULT_OLLAMA_BASE_URL
-    )
-
-    guardrail_api_key = env.get("GUARDRAIL_API_KEY") or os.getenv("GUARDRAIL_API_KEY") or ""
-    guardrail_hostname = (
-        env.get("GUARDRAIL_HOSTNAME")
-        or os.getenv("GUARDRAIL_HOSTNAME")
-        or DEFAULT_GUARDRAIL_HOSTNAME
-    )
-    guardrail_scan_url = (
-        env.get("GUARDRAIL_SCAN_URL")
-        or os.getenv("GUARDRAIL_SCAN_URL")
-        or build_guardrail_url(guardrail_hostname, GUARDRAIL_SCAN_PATH)
-    )
-    guardrail_prompt_api_url = (
-        env.get("GUARDRAIL_PROMPT_API_URL")
-        or os.getenv("GUARDRAIL_PROMPT_API_URL")
-        or build_guardrail_url(guardrail_hostname, GUARDRAIL_PROMPT_API_PATH)
-    )
-
-    return {
-        "model_provider": provider,
-        "openai_api_key": openai_api_key,
-        "openai_model": openai_model,
-        "ollama_model": ollama_model,
-        "ollama_base_url": ollama_base_url,
-        "guardrail_api_key": guardrail_api_key,
-        "guardrail_hostname": guardrail_hostname,
-        "guardrail_scan_url": guardrail_scan_url,
-        "guardrail_prompt_api_url": guardrail_prompt_api_url,
-    }
-
-
-def persist_settings(config: dict[str, str]) -> None:
-    ENV_PATH.touch(exist_ok=True)
-
-    values_to_save = {
-        "MODEL_PROVIDER": config["model_provider"],
-        "OPENAI_API_KEY": config["openai_api_key"],
-        "OPENAI_MODEL": config["openai_model"],
-        "OLLAMA_MODEL": config["ollama_model"],
-        "OLLAMA_BASE_URL": config["ollama_base_url"],
-        "GUARDRAIL_API_KEY": config["guardrail_api_key"],
-        "GUARDRAIL_HOSTNAME": config["guardrail_hostname"],
-        "GUARDRAIL_SCAN_URL": build_guardrail_url(
-            config["guardrail_hostname"], GUARDRAIL_SCAN_PATH
-        ),
-        "GUARDRAIL_PROMPT_API_URL": build_guardrail_url(
-            config["guardrail_hostname"], GUARDRAIL_PROMPT_API_PATH
-        ),
-    }
-
-    for key, value in values_to_save.items():
-        set_key(str(ENV_PATH), key, value or "")
-        os.environ[key] = value or ""
-
+        raise RuntimeError(f"Missing {var_name}. Enter it in Settings or provide it in .env.")
 
 
 def get_openai_client(api_key: str) -> OpenAI:
     require_env("OPENAI_API_KEY", api_key)
     return OpenAI(api_key=api_key)
+
+
+def get_openai_compatible_client(base_url: str, api_key: str) -> OpenAI:
+    require_env("OPENAI_COMPATIBLE_BASE_URL", base_url)
+    require_env("OPENAI_COMPATIBLE_API_KEY", api_key)
+    return OpenAI(base_url=base_url, api_key=api_key)
 
 
 def get_ollama_client(base_url: str) -> OpenAI:
@@ -285,13 +222,12 @@ def get_ollama_client(base_url: str) -> OpenAI:
 def get_llm_client(settings: dict[str, str]) -> OpenAI:
     if settings["model_provider"] == "Ollama":
         return get_ollama_client(settings["ollama_base_url"])
+    if settings["model_provider"] == "OpenAI compatible":
+        return get_openai_compatible_client(
+            settings["openai_compatible_base_url"],
+            settings["openai_compatible_api_key"],
+        )
     return get_openai_client(settings["openai_api_key"])
-
-
-def get_selected_model(settings: dict[str, str]) -> str:
-    if settings["model_provider"] == "Ollama":
-        return settings["ollama_model"]
-    return settings["openai_model"]
 
 
 def get_ollama_tags_url(base_url: str) -> str:
@@ -322,6 +258,13 @@ def get_model_error_hint(exc: Exception, settings: dict[str, str]) -> str | None
         return (
             f"Selected OpenAI model `{get_selected_model(settings)}` is not available for this "
             "API key or project. Choose a different OpenAI model in Settings or switch to Ollama."
+        )
+    if settings["model_provider"] == "OpenAI compatible" and (
+        "Connection error" in message or "NotFoundError" in message or "404" in message
+    ):
+        return (
+            "The OpenAI-compatible endpoint did not accept the request. Confirm the base URL "
+            "includes the API version path if required, for example `https://host.example.com/v1`."
         )
     return None
 
@@ -426,7 +369,8 @@ def llm_chat(
 st.set_page_config(page_title="Secure Chatbot", layout="centered")
 st.title("🛡️ F5 Secure Chatbot")
 
-settings = load_app_config()
+env_values = {**os.environ, **dotenv_values(ENV_PATH)}
+settings = seed_session_settings(st.session_state, env_values)
 
 with st.sidebar:
     st.header("Guardrail settings")
@@ -446,22 +390,28 @@ with st.sidebar:
     provider_settings_disabled = guardrail_enabled and guardrail_mode == "Inline"
     if provider_settings_disabled:
         st.info(
-            "Inline mode uses the F5 Guardrail Prompt API directly, so model settings do not take affect"
+            "Inline mode uses the F5 Guardrail Prompt API directly, so model settings do not take effect"
         )
 
     show_debug = st.checkbox("Show debug details", value=False)
     if st.button("Clear chat"):
         st.session_state.messages = []
-        st.session_state.last_mode = (guardrail_enabled, guardrail_mode, settings["model_provider"], get_selected_model(settings))
+        st.session_state.last_mode = (
+            guardrail_enabled,
+            guardrail_mode,
+            settings["model_provider"],
+            get_selected_model(settings),
+        )
         st.rerun()
 
     st.divider()
 
     with st.expander("Settings", expanded=True):
-        provider_index = MODEL_PROVIDERS.index(settings["model_provider"])
+        available_model_providers = get_available_model_providers(settings)
+        provider_index = available_model_providers.index(settings["model_provider"])
         model_provider = st.selectbox(
             "Model provider",
-            MODEL_PROVIDERS,
+            available_model_providers,
             index=provider_index,
             disabled=provider_settings_disabled,
             key="settings_model_provider",
@@ -470,6 +420,9 @@ with st.sidebar:
         with st.form("settings_form", enter_to_submit=False):
             openai_model = settings["openai_model"]
             openai_api_key = settings["openai_api_key"]
+            openai_compatible_model = settings["openai_compatible_model"]
+            openai_compatible_base_url = settings["openai_compatible_base_url"]
+            openai_compatible_api_key = settings["openai_compatible_api_key"]
             ollama_model = settings["ollama_model"]
             ollama_base_url = settings["ollama_base_url"]
             guardrail_api_key = settings["guardrail_api_key"]
@@ -506,8 +459,40 @@ with st.sidebar:
 
                     openai_api_key = st.text_input(
                         "OpenAI API key",
-                        value=settings["openai_api_key"],
+                        value="",
+                        placeholder=(
+                            "Configured for this session"
+                            if settings["openai_api_key"]
+                            else ""
+                        ),
                         type="password",
+                        help="Leave blank to keep the current session value.",
+                        disabled=provider_settings_disabled,
+                    )
+                elif model_provider == "OpenAI compatible":
+                    openai_compatible_base_url = st.text_input(
+                        "OpenAI-compatible base URL",
+                        value=settings["openai_compatible_base_url"],
+                        placeholder="https://api.example.com/v1",
+                        help="Use the provider's OpenAI-compatible API base URL, usually ending in /v1.",
+                        disabled=provider_settings_disabled,
+                    )
+                    openai_compatible_model = st.text_input(
+                        "OpenAI-compatible model",
+                        value=settings["openai_compatible_model"],
+                        placeholder=DEFAULT_COMPATIBLE_MODEL,
+                        disabled=provider_settings_disabled,
+                    )
+                    openai_compatible_api_key = st.text_input(
+                        "OpenAI-compatible API key",
+                        value="",
+                        placeholder=(
+                            "Configured for this session"
+                            if settings["openai_compatible_api_key"]
+                            else ""
+                        ),
+                        type="password",
+                        help="Leave blank to keep the current session value.",
                         disabled=provider_settings_disabled,
                     )
                 else:
@@ -568,27 +553,53 @@ with st.sidebar:
                 )
                 guardrail_api_key = st.text_input(
                     "F5 Guardrail API key",
-                    value=settings["guardrail_api_key"],
+                    value="",
+                    placeholder=(
+                        "Configured for this session"
+                        if settings["guardrail_api_key"]
+                        else ""
+                    ),
                     type="password",
+                    help="Leave blank to keep the current session value.",
                 )
 
             submitted = st.form_submit_button("Save settings")
 
-        st.caption("Saved values are written to .env")
+        st.caption(
+            "Values entered here are kept only for this browser session. "
+            "Values already present in .env are loaded as defaults."
+        )
 
         if submitted:
             updated_settings = {
                 **settings,
                 "model_provider": model_provider,
                 "openai_model": openai_model.strip() or DEFAULT_OPENAI_MODEL,
-                "openai_api_key": openai_api_key.strip(),
+                "openai_api_key": openai_api_key.strip() or settings["openai_api_key"],
+                "openai_compatible_model": (
+                    openai_compatible_model.strip() or DEFAULT_COMPATIBLE_MODEL
+                ),
+                "openai_compatible_base_url": (
+                    openai_compatible_base_url.strip() or DEFAULT_COMPATIBLE_BASE_URL
+                ),
+                "openai_compatible_api_key": (
+                    openai_compatible_api_key.strip()
+                    or settings["openai_compatible_api_key"]
+                ),
                 "ollama_model": ollama_model.strip() or DEFAULT_OLLAMA_MODEL,
                 "ollama_base_url": ollama_base_url.strip() or DEFAULT_OLLAMA_BASE_URL,
-                "guardrail_api_key": guardrail_api_key.strip(),
+                "guardrail_api_key": (
+                    guardrail_api_key.strip() or settings["guardrail_api_key"]
+                ),
                 "guardrail_hostname": guardrail_hostname.strip() or DEFAULT_GUARDRAIL_HOSTNAME,
             }
-            persist_settings(updated_settings)
-            st.success("Settings saved to .env")
+            settings = update_session_settings(st.session_state, updated_settings)
+            st.success("Settings saved for this browser session")
+            st.rerun()
+
+        if st.button("Reset settings from .env"):
+            settings = reset_session_settings(st.session_state, env_values)
+            st.success("Session settings reset from .env")
             st.rerun()
 
     st.divider()

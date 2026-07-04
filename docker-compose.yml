@@ -1,0 +1,13 @@
+services:
+  f5-chatbot:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Edit APP_PORT in .env to change the host port without changing this file.
+      - "${APP_PORT:-8080}:8501"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
