@@ -432,13 +432,7 @@ with st.sidebar:
     with st.expander("Settings", expanded=True):
         available_model_providers = get_available_model_providers(settings)
         provider_index = available_model_providers.index(settings["model_provider"])
-        model_provider = st.selectbox(
-            "Model provider",
-            available_model_providers,
-            index=provider_index,
-            disabled=provider_settings_disabled,
-            key="settings_model_provider",
-        )
+        model_provider = settings["model_provider"]
 
         with st.container():
             openai_model = settings["openai_model"]
@@ -452,7 +446,15 @@ with st.sidebar:
             guardrail_hostname = settings["guardrail_hostname"]
 
             with st.container(border=True):
-                st.subheader("Model Provider")
+                st.subheader("LLM Model")
+                model_provider = st.selectbox(
+                    "Model provider",
+                    available_model_providers,
+                    index=provider_index,
+                    disabled=provider_settings_disabled,
+                    key="settings_model_provider",
+                )
+
                 if model_provider == "OpenAI":
                     openai_model_options = list(COMMON_OPENAI_MODELS) + [OTHER_MODEL_OPTION]
                     openai_model_choice = settings.get(
