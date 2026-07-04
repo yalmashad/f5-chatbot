@@ -76,6 +76,16 @@ docker compose down
 docker compose up -d --build
 ```
 
+## Reverse Proxy
+
+When publishing through a reverse proxy or load balancer, WebSocket support must be enabled for Streamlit:
+
+```text
+/_stcore/stream
+```
+
+For F5 Distributed Cloud, enable WebSocket upgrade on the route and use HTTP/1.1 to the origin.
+
 ## Ollama
 
 Ollama is for local model use. Set this in `.env` to hide it from the provider dropdown:

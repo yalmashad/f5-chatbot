@@ -13,4 +13,4 @@ COPY app_settings.py f5_chatbot.py ./
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "f5_chatbot.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "f5_chatbot.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
