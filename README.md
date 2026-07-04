@@ -1,58 +1,39 @@
 # F5 Secure Chatbot
 
-A Streamlit-based chatbot UI that supports:
+Streamlit chatbot for testing F5 Guardrail with OpenAI or Ollama. Users can type a prompt and attach a PDF or DOCX from the same chat input.
 
-- OpenAI models
-- Local LLMs through Ollama
-- F5 Guardrail protection in `Inline` or `Out-of-band` mode
-- Managing API keys and model settings directly from the UI
-- Saving configuration to `.env`
-- Uploading PDF and DOCX documents with chat prompts
+## Clone
 
-## Features
-
-- Switch between `OpenAI` and `Ollama` from the Settings panel
-- Show only the settings relevant to the selected provider
-- Choose an OpenAI model from a list of common models or enter one manually
-- Load local Ollama models into a dropdown when Ollama is available
-- Enter and save `OPENAI_API_KEY` in the UI
-- Enter and save `F5AI_API_KEY` in the UI as `F5 Guardrail API key`
-- Load values from `.env` automatically on startup
-- Clear chat history from the sidebar
-- Optional debug output for guardrail responses
-- Upload PDF and DOCX documents alongside chat prompts
-- Extract document text locally before sending content to Guardrail
-- Fail closed for unsupported, oversized, empty, or unparsable documents
-
-## How It Works
-
-The app supports three chat flows:
-
-1. `Guardrail disabled`
-   The app sends prompts directly to the selected model provider:
-   - OpenAI
-   - Ollama
-
-2. `Inline`
-   The app sends the prompt, including extracted document text when a document is attached, to the F5 Guardrail Prompt API and returns its response directly.
-
-   In this mode, model settings are disabled in the UI because they do not affect the response.
-
-3. `Out-of-band`
-   The app scans the user prompt, including extracted document text when a document is attached, with the F5 Guardrail Scan API. If the scan clears, it sends the prompt and hidden document context to the selected model provider, then scans the model response before displaying it.
-
-## Requirements
-
-- Python 3.10+
-- [Ollama](https://ollama.com/) installed locally if you want to use local models
-- An OpenAI API key if you want to use OpenAI
-- An F5 Guardrail API key if you want to use `Inline` or `Out-of-band`
+```bash
+git clone https://github.com/yalmashad/f5-chatbot.git
+cd f5-chatbot
+```
 
 ## Install
 
 ```bash
-pip install streamlit requests python-dotenv openai pypdf python-docx pytest
+python3 -m venv .venv
+source .venv/bin/activate
+pip install streamlit requests python-dotenv openai pypdf python-docx
 ```
+
+## Configure
+
+Create a `.env` file:
+
+```env
+MODEL_PROVIDER=OpenAI
+OPENAI_API_KEY=your-openai-key
+OPENAI_MODEL=gpt-4o-mini
+
+GUARDRAIL_API_KEY=your-f5-guardrail-key
+GUARDRAIL_HOSTNAME=https://www.us1.calypsoai.app
+
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODEL=llama3.2
+```
+
+Use `MODEL_PROVIDER=Ollama` only if Ollama is running locally.
 
 ## Run
 
@@ -60,99 +41,11 @@ pip install streamlit requests python-dotenv openai pypdf python-docx pytest
 streamlit run f5_chatbot.py
 ```
 
-## Configuration
-
-The application reads configuration from `.env` and can also update it from the sidebar Settings form.
-
-Example `.env`:
-
-```env
-MODEL_PROVIDER=OpenAI
-OPENAI_API_KEY=your-openai-key
-OPENAI_MODEL=gpt-4o-mini
-
-OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_MODEL=llama3.2
-
-F5AI_API_KEY=your-f5-guardrail-key
-
-CALYPSO_SCAN_URL=https://www.us1.calypsoai.app/backend/v1/scans
-CALYPSO_PROMPT_API_URL=https://www.us1.calypsoai.app/backend/v1/prompts
-```
-
-## Using OpenAI
-
-1. Open the app.
-2. In `Settings`, choose `OpenAI` as the model provider.
-3. Choose a common OpenAI model from the dropdown, or select `Custom...` and enter one manually.
-4. Enter your `OpenAI API key`.
-5. Click `Save settings`.
-
-If Guardrail is disabled or set to `Out-of-band`, the app will use OpenAI for chat responses.
-
-## Using Ollama
-
-1. Start Ollama locally.
-2. Make sure the Ollama API is available, usually at `http://localhost:11434/v1`.
-3. Pull a model if needed, for example:
-
-```bash
-ollama pull llama3.2
-```
-
-4. Open the app.
-5. In `Settings`, choose `Ollama` as the model provider.
-6. Confirm the Ollama base URL.
-7. Choose one of the detected local Ollama models from the dropdown, or enter one manually if needed.
-8. Click `Save settings`.
-
-If Guardrail is disabled or set to `Out-of-band`, the app will use Ollama for chat responses.
-
 ## Document Uploads
 
-Users can attach a PDF or DOCX document with a normal chat prompt. The app extracts text locally and sends the combined user prompt plus extracted document text to F5 Guardrail for inspection before the model sees the document content.
+- Supported: PDF and DOCX
+- Maximum file size: 10 MB
+- Maximum extracted text: 100,000 characters
+- Scanned PDFs that require OCR are not supported
 
-Supported files:
-
-- PDF files with selectable text
-- DOCX files
-
-Limits:
-
-- Maximum uploaded file size: 10 MB
-- Maximum extracted text size: 100,000 characters
-
-The app fails closed when a document is unsupported, too large, empty after extraction, or cannot be parsed. Scanned PDFs that require OCR are not supported in this version.
-
-Extracted document text is not shown in the visible chat. Debug mode shows document metadata and redacted guardrail JSON, not the full extracted document text.
-
-## Guardrail Modes
-
-### Inline
-
-- Uses the F5 Guardrail Prompt API directly
-- Requires `F5AI_API_KEY`
-- Does not use the selected OpenAI or Ollama model for the response
-
-### Out-of-band
-
-- Scans the prompt before model execution
-- Sends the prompt to OpenAI or Ollama
-- Scans the model response before showing it
-- Requires `F5AI_API_KEY`
-
-### Disabled
-
-- Sends prompts directly to OpenAI or Ollama
-- Does not call the F5 Guardrail APIs
-
-## Secrets and UI Behavior
-
-- Secret inputs use password fields
-- Settings saved in the UI are written back to `.env`
-- Manual edits to `.env` are loaded on the next rerun
-
-## Notes
-
-- The app currently stores settings in a local `.env` file for convenience.
-- If you plan to publish this repository, do not commit real API keys.
+The app extracts document text locally, sends the combined prompt and document text to F5 Guardrail, then sends document context to the model only after inspection clears.

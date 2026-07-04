@@ -612,8 +612,6 @@ if st.session_state.last_mode != current_mode:
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "document_uploader_nonce" not in st.session_state:
-    st.session_state.document_uploader_nonce = 0
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
@@ -634,17 +632,23 @@ for msg in st.session_state.messages:
                 with st.expander("Document extraction metadata"):
                     st.json(msg["document"])
 
-uploaded_document = st.file_uploader(
-    "Attach a PDF or DOCX",
-    type=["pdf", "docx"],
-    label_visibility="collapsed",
-    key=f"document_uploader_{st.session_state.document_uploader_nonce}",
+chat_submission = st.chat_input(
+    "Enter your prompt...",
+    accept_file=True,
+    file_type=["pdf", "docx"],
+    max_upload_size=10,
 )
-prompt = st.chat_input("Enter your prompt...")
 
-if prompt:
-    submitted_document = uploaded_document
-    st.session_state.document_uploader_nonce += 1
+if chat_submission:
+    if isinstance(chat_submission, str):
+        prompt = chat_submission
+        submitted_document = None
+    else:
+        prompt = chat_submission.text or ""
+        submitted_document = chat_submission.files[0] if chat_submission.files else None
+
+    if submitted_document is not None and not prompt.strip():
+        prompt = "Please analyze the attached document."
 
     user_message = {"role": "user", "content": prompt}
     if submitted_document is not None:
