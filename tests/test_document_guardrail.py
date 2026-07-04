@@ -7,6 +7,7 @@ from f5_chatbot import (
     MAX_DOCUMENT_FILE_BYTES,
     MAX_EXTRACTED_TEXT_CHARS,
     DocumentInspectionError,
+    extract_uploaded_document,
     build_document_inspection_payload,
     build_document_model_messages,
     extract_docx_text,
@@ -15,9 +16,13 @@ from f5_chatbot import (
 
 
 class FakeUpload:
-    def __init__(self, name: str, size: int):
+    def __init__(self, name: str, size: int, data: bytes = b""):
         self.name = name
         self.size = size
+        self._data = data
+
+    def getvalue(self) -> bytes:
+        return self._data
 
 
 def test_validate_document_upload_accepts_pdf_under_limit():
@@ -91,3 +96,42 @@ def test_extract_docx_text_reads_paragraph_text():
 
     assert "First paragraph" in text
     assert "Second paragraph" in text
+
+
+def test_extract_uploaded_document_rejects_actual_docx_bytes_over_limit():
+    uploaded = FakeUpload(
+        "large.docx",
+        1,
+        b"x" * (MAX_DOCUMENT_FILE_BYTES + 1),
+    )
+
+    with pytest.raises(DocumentInspectionError, match="10 MB"):
+        extract_uploaded_document(uploaded)
+
+
+def test_extract_uploaded_document_returns_docx_metadata():
+    doc = Document()
+    doc.add_paragraph("Paragraph content")
+    buffer = BytesIO()
+    doc.save(buffer)
+    file_bytes = buffer.getvalue()
+    uploaded = FakeUpload("notes.docx", 1, file_bytes)
+
+    extracted = extract_uploaded_document(uploaded)
+
+    assert extracted.filename == "notes.docx"
+    assert extracted.extension == ".docx"
+    assert extracted.size_bytes == len(file_bytes)
+    assert "Paragraph content" in extracted.text
+    assert extracted.char_count == len(extracted.text)
+
+
+def test_extract_uploaded_document_rejects_empty_docx():
+    doc = Document()
+    buffer = BytesIO()
+    doc.save(buffer)
+    file_bytes = buffer.getvalue()
+    uploaded = FakeUpload("empty.docx", len(file_bytes), file_bytes)
+
+    with pytest.raises(DocumentInspectionError, match="No inspectable text"):
+        extract_uploaded_document(uploaded)

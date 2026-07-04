@@ -75,18 +75,30 @@ def extract_pdf_text(file_bytes: bytes) -> str:
     page_text = []
     for page in reader.pages:
         page_text.append(page.extract_text() or "")
+        normalized_text = normalize_extracted_text("\n".join(page_text))
+        if len(normalized_text) > MAX_EXTRACTED_TEXT_CHARS:
+            raise DocumentInspectionError("Document text is too large to inspect safely.")
     return normalize_extracted_text("\n".join(page_text))
 
 
 def extract_docx_text(file_bytes: bytes) -> str:
     document = Document(BytesIO(file_bytes))
-    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    paragraphs = []
+    for paragraph in document.paragraphs:
+        paragraphs.append(paragraph.text)
+        normalized_text = normalize_extracted_text("\n".join(paragraphs))
+        if len(normalized_text) > MAX_EXTRACTED_TEXT_CHARS:
+            raise DocumentInspectionError("Document text is too large to inspect safely.")
     return normalize_extracted_text("\n".join(paragraphs))
 
 
 def extract_uploaded_document(uploaded_file) -> ExtractedDocument:
     extension = validate_document_upload(uploaded_file)
     file_bytes = uploaded_file.getvalue()
+    if len(file_bytes) > MAX_DOCUMENT_FILE_BYTES:
+        raise DocumentInspectionError(
+            "Document is too large to inspect safely. Maximum size is 10 MB."
+        )
 
     if extension == ".pdf":
         text = extract_pdf_text(file_bytes)
