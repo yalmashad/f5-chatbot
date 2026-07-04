@@ -439,7 +439,7 @@ with st.sidebar:
             key="settings_model_provider",
         )
 
-        with st.form("settings_form", enter_to_submit=False):
+        with st.container():
             openai_model = settings["openai_model"]
             openai_api_key = settings["openai_api_key"]
             openai_compatible_model = settings["openai_compatible_model"]
@@ -584,7 +584,7 @@ with st.sidebar:
                     help="Leave blank to keep the current session value.",
                 )
 
-            submitted = st.form_submit_button("Save settings")
+            submitted = st.button("Save settings")
 
         st.caption(
             "Values entered here are kept only for this browser session. "
