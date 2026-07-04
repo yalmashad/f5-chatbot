@@ -3,8 +3,8 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      # Edit APP_PORT in .env to change the host port without changing this file.
-      - "${APP_PORT:-8080}:8501"
+      # Change the left side if port 8080 is already in use, for example "8501:8501".
+      - "8080:8501"
     env_file:
       - path: .env
         required: false
