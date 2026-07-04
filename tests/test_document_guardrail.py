@@ -12,6 +12,7 @@ from f5_chatbot import (
     build_document_model_messages,
     extract_docx_text,
     validate_document_upload,
+    redact_sensitive_debug_data,
 )
 
 
@@ -68,6 +69,58 @@ def test_build_document_inspection_payload_combines_prompt_and_document_text():
     assert "Summarize this" in payload
     assert "Attached document: report.pdf" in payload
     assert "Document body" in payload
+
+
+def test_redact_sensitive_debug_data_redacts_nested_strings():
+    data = {
+        "request": {
+            "input": "prefix Secret document body suffix",
+            "messages": [
+                "safe",
+                "Secret document body",
+                ("tuple Secret document body",),
+            ],
+        },
+        "response": "Payload: Inspect request\nSecret document body",
+    }
+
+    redacted = redact_sensitive_debug_data(
+        data,
+        ["Inspect request\nSecret document body", "Secret document body"],
+    )
+
+    assert redacted == {
+        "request": {
+            "input": "prefix [redacted document content] suffix",
+            "messages": [
+                "safe",
+                "[redacted document content]",
+                ("tuple [redacted document content]",),
+            ],
+        },
+        "response": "Payload: [redacted document content]",
+    }
+
+
+def test_redact_sensitive_debug_data_leaves_unrelated_strings_unchanged():
+    data = {"message": "No sensitive text here", "nested": ["also safe"]}
+
+    redacted = redact_sensitive_debug_data(data, ["Secret document body"])
+
+    assert redacted == data
+
+
+@pytest.mark.parametrize("sensitive_values", [None, [], [""]])
+def test_redact_sensitive_debug_data_handles_empty_sensitive_values(sensitive_values):
+    data = {
+        "message": "Secret document body",
+        "nested": ["Secret document body"],
+        "tuple": ("Secret document body",),
+    }
+
+    redacted = redact_sensitive_debug_data(data, sensitive_values)
+
+    assert redacted == data
 
 
 def test_build_document_model_messages_marks_document_as_untrusted_context():

@@ -164,6 +164,33 @@ def build_document_model_messages(prompt: str, filename: str, document_text: str
     ]
 
 
+def redact_sensitive_debug_data(value, sensitive_values: list[str] | None):
+    redaction = "[redacted document content]"
+    normalized_sensitive_values = [item for item in (sensitive_values or []) if item]
+
+    if isinstance(value, dict):
+        return {
+            key: redact_sensitive_debug_data(item, normalized_sensitive_values)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            redact_sensitive_debug_data(item, normalized_sensitive_values)
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            redact_sensitive_debug_data(item, normalized_sensitive_values)
+            for item in value
+        )
+    if isinstance(value, str):
+        redacted_value = value
+        for sensitive_value in normalized_sensitive_values:
+            redacted_value = redacted_value.replace(sensitive_value, redaction)
+        return redacted_value
+    return value
+
+
 def require_env(var_name: str, var_value: str | None) -> None:
     if not var_value:
         raise RuntimeError(f"Missing {var_name} in environment (.env).")
@@ -632,6 +659,7 @@ if prompt:
     extracted_document = None
     document_inspection_payload = prompt
     document_model_messages = None
+    sensitive_debug_values = []
 
     if submitted_document is not None:
         try:
@@ -646,6 +674,10 @@ if prompt:
                 extracted_document.filename,
                 extracted_document.text,
             )
+            sensitive_debug_values = [
+                document_inspection_payload,
+                extracted_document.text,
+            ]
         except DocumentInspectionError as e:
             with st.chat_message("assistant"):
                 st.error(str(e))
@@ -687,6 +719,10 @@ if prompt:
             )
         except Exception as e:
             assistant_text, cai_json = None, {"error": str(e)}
+        redacted_cai_json = redact_sensitive_debug_data(
+            cai_json,
+            sensitive_debug_values,
+        )
 
         with st.chat_message("assistant"):
             if assistant_text is None:
@@ -700,7 +736,7 @@ if prompt:
             {
                 "role": "assistant",
                 "content": shown_text,
-                "cai_json": cai_json,
+                "cai_json": redacted_cai_json,
                 "document": {
                     "filename": extracted_document.filename,
                     "extension": extracted_document.extension,
@@ -720,13 +756,17 @@ if prompt:
             settings["guardrail_scan_url"],
         )
         if not cleared_in:
+            redacted_scan_in_json = redact_sensitive_debug_data(
+                scan_in_json,
+                sensitive_debug_values,
+            )
             with st.chat_message("assistant"):
                 st.error("Prompt blocked due to policy.")
             st.session_state.messages.append(
                 {
                     "role": "assistant",
                     "content": "⛔ Prompt blocked due to policy.",
-                    "scan_in": scan_in_json,
+                    "scan_in": redacted_scan_in_json,
                     "scan_out": None,
                 }
             )
@@ -740,14 +780,22 @@ if prompt:
             settings["guardrail_scan_url"],
         )
         if not cleared_out:
+            redacted_scan_in_json = redact_sensitive_debug_data(
+                scan_in_json,
+                sensitive_debug_values,
+            )
+            redacted_scan_out_json = redact_sensitive_debug_data(
+                scan_out_json,
+                sensitive_debug_values,
+            )
             with st.chat_message("assistant"):
                 st.error("Response blocked due to policy.")
             st.session_state.messages.append(
                 {
                     "role": "assistant",
                     "content": "⛔ Response blocked due to policy.",
-                    "scan_in": scan_in_json,
-                    "scan_out": scan_out_json,
+                    "scan_in": redacted_scan_in_json,
+                    "scan_out": redacted_scan_out_json,
                 }
             )
             st.stop()
@@ -755,12 +803,21 @@ if prompt:
         with st.chat_message("assistant"):
             st.markdown(response_text)
 
+        redacted_scan_in_json = redact_sensitive_debug_data(
+            scan_in_json,
+            sensitive_debug_values,
+        )
+        redacted_scan_out_json = redact_sensitive_debug_data(
+            scan_out_json,
+            sensitive_debug_values,
+        )
+
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": response_text,
-                "scan_in": scan_in_json,
-                "scan_out": scan_out_json,
+                "scan_in": redacted_scan_in_json,
+                "scan_out": redacted_scan_out_json,
                 "document": {
                     "filename": extracted_document.filename,
                     "extension": extracted_document.extension,
