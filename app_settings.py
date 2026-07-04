@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_OPENAI_MODEL = "gpt-4o"
 DEFAULT_COMPATIBLE_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 DEFAULT_COMPATIBLE_BASE_URL = ""
 DEFAULT_OLLAMA_MODEL = "llama3.2"

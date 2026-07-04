@@ -30,12 +30,13 @@ ENV_PATH = BASE_DIR / ".env"
 load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 COMMON_OPENAI_MODELS = (
-    "gpt-3.5-turbo",
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4.1-mini",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
     "gpt-4.1",
+    "gpt-4o",
 )
+OTHER_MODEL_OPTION = "Other"
 MAX_DOCUMENT_FILE_BYTES = 10 * 1024 * 1024
 MAX_EXTRACTED_TEXT_CHARS = 100_000
 SUPPORTED_DOCUMENT_EXTENSIONS = (".pdf", ".docx")
@@ -411,7 +412,7 @@ with st.sidebar:
     provider_settings_disabled = guardrail_enabled and guardrail_mode == "Inline"
     if provider_settings_disabled:
         st.info(
-            "Inline mode uses the F5 Guardrail Prompt API directly, so model settings do not take effect"
+            "Inline mode uses the model configured in F5 Guardrail, so model settings here do not apply."
         )
 
     show_debug = st.checkbox("Show debug details", value=False)
@@ -455,7 +456,7 @@ with st.sidebar:
                     openai_model_options = list(COMMON_OPENAI_MODELS)
                     use_custom_openai = settings["openai_model"] not in openai_model_options
                     if use_custom_openai:
-                        openai_model_options.append("Custom...")
+                        openai_model_options.append(OTHER_MODEL_OPTION)
                         openai_model_index = len(openai_model_options) - 1
                     else:
                         openai_model_index = openai_model_options.index(settings["openai_model"])
@@ -468,9 +469,9 @@ with st.sidebar:
                         disabled=provider_settings_disabled,
                     )
 
-                    if selected_openai_model == "Custom...":
+                    if selected_openai_model == OTHER_MODEL_OPTION:
                         openai_model = st.text_input(
-                            "Custom OpenAI model",
+                            "Other OpenAI model",
                             value=settings["openai_model"] if use_custom_openai else "",
                             help="Use this if the model you want is not listed.",
                             disabled=provider_settings_disabled,
