@@ -162,6 +162,10 @@ def build_document_model_messages(prompt: str, filename: str, document_text: str
     ]
 
 
+def build_model_response_scan_payload(response_text: str) -> str:
+    return f"Model response:\n{response_text}"
+
+
 def redact_sensitive_debug_data(value, sensitive_values: list[str] | None):
     redaction = "[redacted document content]"
     normalized_sensitive_values = [item for item in (sensitive_values or []) if item]
@@ -789,8 +793,9 @@ if chat_submission:
 
         response_text = llm_chat(prompt, settings, messages=document_model_messages)
 
+        response_scan_payload = build_model_response_scan_payload(response_text)
         cleared_out, scan_out_json = cai_scanapi(
-            response_text,
+            response_scan_payload,
             settings["guardrail_api_key"],
             settings["guardrail_scan_url"],
         )
