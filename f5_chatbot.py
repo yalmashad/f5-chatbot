@@ -70,6 +70,14 @@ def normalize_extracted_text(text: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def escape_markdown_text(text: str) -> str:
+    return text.translate(str.maketrans({char: f"\\{char}" for char in r"\\`*_{}[]()#+-.!|>"}))
+
+
+def format_attachment_caption(filename: str) -> str:
+    return f"Attached: {escape_markdown_text(filename)}"
+
+
 def extract_pdf_text(file_bytes: bytes) -> str:
     reader = PdfReader(BytesIO(file_bytes))
     page_text = []
@@ -577,12 +585,14 @@ if st.session_state.last_mode != current_mode:
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "document_uploader_nonce" not in st.session_state:
+    st.session_state.document_uploader_nonce = 0
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "attachment" in msg:
-            st.caption(f"Attached: {msg['attachment']}")
+            st.caption(format_attachment_caption(msg["attachment"]))
         if show_debug:
             if "cai_json" in msg and msg["cai_json"] is not None:
                 with st.expander("F5 Guardrail JSON"):
@@ -598,19 +608,23 @@ uploaded_document = st.file_uploader(
     "Attach a PDF or DOCX",
     type=["pdf", "docx"],
     label_visibility="collapsed",
+    key=f"document_uploader_{st.session_state.document_uploader_nonce}",
 )
 prompt = st.chat_input("Enter your prompt...")
 
 if prompt:
+    submitted_document = uploaded_document
+    st.session_state.document_uploader_nonce += 1
+
     user_message = {"role": "user", "content": prompt}
-    if uploaded_document is not None:
-        user_message["attachment"] = uploaded_document.name
+    if submitted_document is not None:
+        user_message["attachment"] = submitted_document.name
 
     st.session_state.messages.append(user_message)
     with st.chat_message("user"):
         st.markdown(prompt)
-        if uploaded_document is not None:
-            st.caption(f"Attached: {uploaded_document.name}")
+        if submitted_document is not None:
+            st.caption(format_attachment_caption(submitted_document.name))
 
     if not guardrail_enabled:
         try:
