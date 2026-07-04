@@ -1,6 +1,10 @@
 .git
+.env
 .venv
+.venv*
+.worktrees
 __pycache__
+.pycache
 *.py[cod]
 .pytest_cache
 .DS_Store
