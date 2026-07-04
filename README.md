@@ -7,6 +7,7 @@ A Streamlit-based chatbot UI that supports:
 - F5 Guardrail protection in `Inline` or `Out-of-band` mode
 - Managing API keys and model settings directly from the UI
 - Saving configuration to `.env`
+- Uploading PDF and DOCX documents with chat prompts
 
 ## Features
 
@@ -19,6 +20,9 @@ A Streamlit-based chatbot UI that supports:
 - Load values from `.env` automatically on startup
 - Clear chat history from the sidebar
 - Optional debug output for guardrail responses
+- Upload PDF and DOCX documents alongside chat prompts
+- Extract document text locally before sending content to Guardrail
+- Fail closed for unsupported, oversized, empty, or unparsable documents
 
 ## How It Works
 
@@ -30,12 +34,12 @@ The app supports three chat flows:
    - Ollama
 
 2. `Inline`
-   The app sends the prompt to the F5 Guardrail Prompt API and returns its response directly.
+   The app sends the prompt, including extracted document text when a document is attached, to the F5 Guardrail Prompt API and returns its response directly.
 
    In this mode, model settings are disabled in the UI because they do not affect the response.
 
 3. `Out-of-band`
-   The app scans the user prompt with the F5 Guardrail Scan API, sends the prompt to the selected model provider, then scans the model response before displaying it.
+   The app scans the user prompt, including extracted document text when a document is attached, with the F5 Guardrail Scan API. If the scan clears, it sends the prompt and hidden document context to the selected model provider, then scans the model response before displaying it.
 
 ## Requirements
 
@@ -47,7 +51,7 @@ The app supports three chat flows:
 ## Install
 
 ```bash
-pip install streamlit requests python-dotenv openai
+pip install streamlit requests python-dotenv openai pypdf python-docx pytest
 ```
 
 ## Run
@@ -103,6 +107,24 @@ ollama pull llama3.2
 8. Click `Save settings`.
 
 If Guardrail is disabled or set to `Out-of-band`, the app will use Ollama for chat responses.
+
+## Document Uploads
+
+Users can attach a PDF or DOCX document with a normal chat prompt. The app extracts text locally and sends the combined user prompt plus extracted document text to F5 Guardrail for inspection before the model sees the document content.
+
+Supported files:
+
+- PDF files with selectable text
+- DOCX files
+
+Limits:
+
+- Maximum uploaded file size: 10 MB
+- Maximum extracted text size: 100,000 characters
+
+The app fails closed when a document is unsupported, too large, empty after extraction, or cannot be parsed. Scanned PDFs that require OCR are not supported in this version.
+
+Extracted document text is not shown in the visible chat. Debug mode shows document metadata and redacted guardrail JSON, not the full extracted document text.
 
 ## Guardrail Modes
 
