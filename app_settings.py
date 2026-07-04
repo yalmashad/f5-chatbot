@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 DEFAULT_OPENAI_MODEL = "gpt-4o"
+DEFAULT_OPENAI_MODEL_CHOICE = DEFAULT_OPENAI_MODEL
 DEFAULT_COMPATIBLE_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 DEFAULT_COMPATIBLE_BASE_URL = ""
 DEFAULT_OLLAMA_MODEL = "llama3.2"
@@ -71,6 +72,11 @@ def _settings_from_env(env: dict) -> dict[str, str]:
         "enable_ollama": enable_ollama,
         "openai_api_key": _first_env(env, "OPENAI_API_KEY"),
         "openai_model": _first_env(env, "OPENAI_MODEL", default=DEFAULT_OPENAI_MODEL),
+        "openai_model_choice": _first_env(
+            env,
+            "OPENAI_MODEL_CHOICE",
+            default=DEFAULT_OPENAI_MODEL_CHOICE,
+        ),
         "openai_compatible_api_key": _first_env(
             env,
             "OPENAI_COMPATIBLE_API_KEY",
@@ -141,6 +147,9 @@ def update_session_settings(session: dict, updates: dict[str, str]) -> dict[str,
     if current["model_provider"] == "Ollama" and "Ollama" not in get_available_model_providers(current):
         current["model_provider"] = "OpenAI"
     current["openai_model"] = current.get("openai_model") or DEFAULT_OPENAI_MODEL
+    current["openai_model_choice"] = (
+        current.get("openai_model_choice") or DEFAULT_OPENAI_MODEL_CHOICE
+    )
     current["openai_compatible_base_url"] = _normalize_base_url(
         current.get("openai_compatible_base_url", "")
     )

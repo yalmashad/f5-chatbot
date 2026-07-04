@@ -16,6 +16,7 @@ from app_settings import (
     DEFAULT_GUARDRAIL_HOSTNAME,
     DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OPENAI_MODEL_CHOICE,
     DEFAULT_OPENAI_MODEL,
     get_available_model_providers,
     get_selected_model,
@@ -454,11 +455,17 @@ with st.sidebar:
                 st.subheader("Model Provider")
                 if model_provider == "OpenAI":
                     openai_model_options = list(COMMON_OPENAI_MODELS) + [OTHER_MODEL_OPTION]
-                    use_custom_openai = settings["openai_model"] not in openai_model_options
-                    if use_custom_openai:
+                    openai_model_choice = settings.get(
+                        "openai_model_choice",
+                        DEFAULT_OPENAI_MODEL_CHOICE,
+                    )
+                    if openai_model_choice not in openai_model_options:
+                        openai_model_choice = DEFAULT_OPENAI_MODEL_CHOICE
+
+                    if openai_model_choice == OTHER_MODEL_OPTION:
                         openai_model_index = len(openai_model_options) - 1
                     else:
-                        openai_model_index = openai_model_options.index(settings["openai_model"])
+                        openai_model_index = openai_model_options.index(openai_model_choice)
 
                     selected_openai_model = st.selectbox(
                         "OpenAI model",
@@ -471,7 +478,11 @@ with st.sidebar:
                     if selected_openai_model == OTHER_MODEL_OPTION:
                         openai_model = st.text_input(
                             "Other OpenAI model",
-                            value=settings["openai_model"] if use_custom_openai else "",
+                            value=(
+                                settings["openai_model"]
+                                if settings["openai_model"] not in COMMON_OPENAI_MODELS
+                                else ""
+                            ),
                             help="Use this if the model you want is not listed.",
                             disabled=provider_settings_disabled,
                         )
@@ -595,6 +606,9 @@ with st.sidebar:
             updated_settings = {
                 **settings,
                 "model_provider": model_provider,
+                "openai_model_choice": selected_openai_model
+                if model_provider == "OpenAI"
+                else settings.get("openai_model_choice", DEFAULT_OPENAI_MODEL_CHOICE),
                 "openai_model": openai_model.strip() or DEFAULT_OPENAI_MODEL,
                 "openai_api_key": openai_api_key.strip() or settings["openai_api_key"],
                 "openai_compatible_model": (
