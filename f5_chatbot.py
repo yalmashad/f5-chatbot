@@ -5,8 +5,10 @@ from pathlib import Path
 
 import requests
 import streamlit as st
+from docx import Document
 from dotenv import dotenv_values, load_dotenv, set_key
 from openai import OpenAI
+from pypdf import PdfReader
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -66,6 +68,40 @@ def validate_document_upload(uploaded_file) -> str:
 def normalize_extracted_text(text: str) -> str:
     lines = [line.strip() for line in text.splitlines()]
     return "\n".join(line for line in lines if line)
+
+
+def extract_pdf_text(file_bytes: bytes) -> str:
+    reader = PdfReader(BytesIO(file_bytes))
+    page_text = []
+    for page in reader.pages:
+        page_text.append(page.extract_text() or "")
+    return normalize_extracted_text("\n".join(page_text))
+
+
+def extract_docx_text(file_bytes: bytes) -> str:
+    document = Document(BytesIO(file_bytes))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    return normalize_extracted_text("\n".join(paragraphs))
+
+
+def extract_uploaded_document(uploaded_file) -> ExtractedDocument:
+    extension = validate_document_upload(uploaded_file)
+    file_bytes = uploaded_file.getvalue()
+
+    if extension == ".pdf":
+        text = extract_pdf_text(file_bytes)
+    elif extension == ".docx":
+        text = extract_docx_text(file_bytes)
+    else:
+        raise DocumentInspectionError("Only PDF and DOCX documents are supported.")
+
+    build_document_inspection_payload("", uploaded_file.name, text)
+    return ExtractedDocument(
+        filename=uploaded_file.name,
+        extension=extension,
+        size_bytes=len(file_bytes),
+        text=text,
+    )
 
 
 def build_document_inspection_payload(prompt: str, filename: str, document_text: str) -> str:

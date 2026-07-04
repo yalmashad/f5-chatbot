@@ -1,4 +1,7 @@
+from io import BytesIO
+
 import pytest
+from docx import Document
 
 from f5_chatbot import (
     MAX_DOCUMENT_FILE_BYTES,
@@ -6,6 +9,7 @@ from f5_chatbot import (
     DocumentInspectionError,
     build_document_inspection_payload,
     build_document_model_messages,
+    extract_docx_text,
     validate_document_upload,
 )
 
@@ -74,3 +78,16 @@ def test_build_document_model_messages_marks_document_as_untrusted_context():
     assert "report.docx" in messages[1]["content"]
     assert "Document body" in messages[1]["content"]
     assert "Summarize this" in messages[1]["content"]
+
+
+def test_extract_docx_text_reads_paragraph_text():
+    doc = Document()
+    doc.add_paragraph("First paragraph")
+    doc.add_paragraph("Second paragraph")
+    buffer = BytesIO()
+    doc.save(buffer)
+
+    text = extract_docx_text(buffer.getvalue())
+
+    assert "First paragraph" in text
+    assert "Second paragraph" in text
