@@ -1,5 +1,7 @@
 services:
   f5-chatbot:
+    image: f5-chatbot
+    container_name: f5-chatbot
     build: .
     restart: unless-stopped
     ports:
