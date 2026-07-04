@@ -581,6 +581,8 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        if "attachment" in msg:
+            st.caption(f"Attached: {msg['attachment']}")
         if show_debug:
             if "cai_json" in msg and msg["cai_json"] is not None:
                 with st.expander("F5 Guardrail JSON"):
@@ -592,12 +594,23 @@ for msg in st.session_state.messages:
                 with st.expander("Guardrail scan - output JSON"):
                     st.json(msg["scan_out"])
 
+uploaded_document = st.file_uploader(
+    "Attach a PDF or DOCX",
+    type=["pdf", "docx"],
+    label_visibility="collapsed",
+)
 prompt = st.chat_input("Enter your prompt...")
 
 if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    user_message = {"role": "user", "content": prompt}
+    if uploaded_document is not None:
+        user_message["attachment"] = uploaded_document.name
+
+    st.session_state.messages.append(user_message)
     with st.chat_message("user"):
         st.markdown(prompt)
+        if uploaded_document is not None:
+            st.caption(f"Attached: {uploaded_document.name}")
 
     if not guardrail_enabled:
         try:
