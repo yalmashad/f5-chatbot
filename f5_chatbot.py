@@ -366,19 +366,24 @@ def cai_promptapi(prompt: str, api_key: str, prompt_api_url: str) -> tuple[str |
     return result.get("response", ""), data
 
 
-def llm_chat(prompt: str, settings: dict[str, str]) -> str:
+def llm_chat(
+    prompt: str,
+    settings: dict[str, str],
+    messages: list[dict[str, str]] | None = None,
+) -> str:
     """
     Chat completion using either OpenAI or a local Ollama endpoint.
     """
     client = get_llm_client(settings)
     model = get_selected_model(settings)
+    chat_messages = messages or [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": prompt},
+    ]
 
     completion = client.chat.completions.create(
         model=model,
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt},
-        ],
+        messages=chat_messages,
     )
     return completion.choices[0].message.content or ""
 
