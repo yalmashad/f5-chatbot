@@ -603,6 +603,9 @@ for msg in st.session_state.messages:
             if "scan_out" in msg and msg["scan_out"] is not None:
                 with st.expander("Guardrail scan - output JSON"):
                     st.json(msg["scan_out"])
+            if "document" in msg and msg["document"] is not None:
+                with st.expander("Document extraction metadata"):
+                    st.json(msg["document"])
 
 uploaded_document = st.file_uploader(
     "Attach a PDF or DOCX",
@@ -626,9 +629,47 @@ if prompt:
         if submitted_document is not None:
             st.caption(format_attachment_caption(submitted_document.name))
 
+    extracted_document = None
+    document_inspection_payload = prompt
+    document_model_messages = None
+
+    if submitted_document is not None:
+        try:
+            extracted_document = extract_uploaded_document(submitted_document)
+            document_inspection_payload = build_document_inspection_payload(
+                prompt,
+                extracted_document.filename,
+                extracted_document.text,
+            )
+            document_model_messages = build_document_model_messages(
+                prompt,
+                extracted_document.filename,
+                extracted_document.text,
+            )
+        except DocumentInspectionError as e:
+            with st.chat_message("assistant"):
+                st.error(str(e))
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"Document inspection failed: {e}",
+                }
+            )
+            st.stop()
+        except Exception as e:
+            with st.chat_message("assistant"):
+                st.error(f"Document parsing failed: {e}")
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"Document parsing failed: {e}",
+                }
+            )
+            st.stop()
+
     if not guardrail_enabled:
         try:
-            response_text = llm_chat(prompt, settings)
+            response_text = llm_chat(prompt, settings, messages=document_model_messages)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
             with st.chat_message("assistant"):
                 st.markdown(response_text)
@@ -640,7 +681,7 @@ if prompt:
     if guardrail_mode == "Inline":
         try:
             assistant_text, cai_json = cai_promptapi(
-                prompt,
+                document_inspection_payload,
                 settings["guardrail_api_key"],
                 settings["guardrail_prompt_api_url"],
             )
@@ -660,13 +701,21 @@ if prompt:
                 "role": "assistant",
                 "content": shown_text,
                 "cai_json": cai_json,
+                "document": {
+                    "filename": extracted_document.filename,
+                    "extension": extracted_document.extension,
+                    "size_bytes": extracted_document.size_bytes,
+                    "char_count": extracted_document.char_count,
+                }
+                if extracted_document is not None
+                else None,
             }
         )
         st.stop()
 
     try:
         cleared_in, scan_in_json = cai_scanapi(
-            prompt,
+            document_inspection_payload,
             settings["guardrail_api_key"],
             settings["guardrail_scan_url"],
         )
@@ -683,7 +732,7 @@ if prompt:
             )
             st.stop()
 
-        response_text = llm_chat(prompt, settings)
+        response_text = llm_chat(prompt, settings, messages=document_model_messages)
 
         cleared_out, scan_out_json = cai_scanapi(
             response_text,
@@ -712,6 +761,14 @@ if prompt:
                 "content": response_text,
                 "scan_in": scan_in_json,
                 "scan_out": scan_out_json,
+                "document": {
+                    "filename": extracted_document.filename,
+                    "extension": extracted_document.extension,
+                    "size_bytes": extracted_document.size_bytes,
+                    "char_count": extracted_document.char_count,
+                }
+                if extracted_document is not None
+                else None,
             }
         )
 
