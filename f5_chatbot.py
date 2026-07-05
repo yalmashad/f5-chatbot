@@ -18,6 +18,7 @@ from app_settings import (
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OPENAI_MODEL_CHOICE,
     DEFAULT_OPENAI_MODEL,
+    clear_session_credentials,
     get_available_model_providers,
     get_selected_model,
     reset_session_settings,
@@ -637,6 +638,12 @@ with st.sidebar:
         if st.button("Reset settings from .env"):
             settings = reset_session_settings(st.session_state, env_values)
             st.success("Session settings reset from .env")
+            st.rerun()
+
+        if st.button("Clear credentials"):
+            settings = clear_session_credentials(st.session_state)
+            st.session_state.messages = []
+            st.success("Session credentials cleared")
             st.rerun()
 
     st.divider()

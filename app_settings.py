@@ -134,6 +134,19 @@ def reset_session_settings(session: dict, env: dict) -> dict[str, str]:
     return session["app_settings"]
 
 
+def clear_session_credentials(session: dict) -> dict[str, str]:
+    current = dict(session.get("app_settings", _settings_from_env({})))
+    current.update(
+        {
+            "openai_api_key": "",
+            "openai_compatible_api_key": "",
+            "guardrail_api_key": "",
+        }
+    )
+    session["app_settings"] = _with_derived_urls(current)
+    return session["app_settings"]
+
+
 def update_session_settings(session: dict, updates: dict[str, str]) -> dict[str, str]:
     current = dict(session.get("app_settings", _settings_from_env({})))
     current.update(
