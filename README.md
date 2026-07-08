@@ -2,6 +2,18 @@
 
 A Docker Compose Streamlit app for testing OpenAI, OpenAI-compatible, or local Ollama models with optional F5 Guardrail protection and PDF/DOCX uploads.
 
+## Overview
+
+F5 Secure Chatbot is a lightweight chat portal for trying prompts and document uploads against different LLM providers while applying F5 Guardrail in inline or out-of-band mode. It is designed to run locally or on a server with simple Docker Compose deployment.
+
+## Features
+
+- OpenAI, OpenAI-compatible, and optional Ollama model providers
+- F5 Guardrail inline and out-of-band protection modes
+- PDF and DOCX upload support
+- Session-only credential entry from the UI
+- Docker Compose deployment with simple `.env` configuration
+
 ## Quick Start
 
 ```bash
