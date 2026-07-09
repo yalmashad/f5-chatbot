@@ -391,7 +391,18 @@ def llm_chat(
 
 
 st.set_page_config(page_title="Secure Chatbot", layout="centered")
-st.title("🛡️ F5 Secure Chatbot")
+st.markdown(
+    """
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+      <svg width="34" height="34" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M21 6L31 10V18.2C31 25.1 26.7 31.2 21 34C15.3 31.2 11 25.1 11 18.2V10L21 6Z" fill="#ff8c1a"/>
+        <path d="M16.5 18.5C16.5 16.0147 18.5147 14 21 14C23.4853 14 25.5 16.0147 25.5 18.5V20H26.5C27.0523 20 27.5 20.4477 27.5 21V25.5C27.5 26.0523 27.0523 26.5 26.5 26.5H15.5C14.9477 26.5 14.5 26.0523 14.5 25.5V21C14.5 20.4477 14.9477 20 15.5 20H16.5V18.5ZM18.5 20H23.5V18.5C23.5 17.1193 22.3807 16 21 16C19.6193 16 18.5 17.1193 18.5 18.5V20Z" fill="#0b0f19"/>
+      </svg>
+      <h1 style="margin:0;font-size:3rem;line-height:1.05;">Secure Chatbot</h1>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 env_values = {**os.environ, **dotenv_values(ENV_PATH)}
 settings = seed_session_settings(st.session_state, env_values)
