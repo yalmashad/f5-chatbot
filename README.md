@@ -31,7 +31,7 @@ docker compose up -d --build
 Open:
 
 ```text
-http://localhost:8501
+http://localhost:8080
 ```
 
 ## Configuration
@@ -72,14 +72,14 @@ The host port is managed only in `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "8501:8501"
+  - "8080:8501"
 ```
 
-If `8501` is already in use, change the left side, for example:
+If `8080` is already in use, change the left side, for example:
 
 ```yaml
 ports:
-  - "8080:8501"
+  - "8501:8501"
 ```
 
 Then restart:
