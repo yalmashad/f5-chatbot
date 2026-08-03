@@ -219,8 +219,11 @@ def render_debug_details(message: dict) -> None:
         with st.expander("Guardrail scan - output JSON"):
             st.json(message["scan_out"])
     if "raw_scan" in message and message["raw_scan"] is not None:
-        with st.expander("Guardrail raw scan - response JSON (/backend/v1/scans/raw/openai-chat-sse)"):
+        with st.expander("Guardrail raw scan - output JSON"):
             st.json(message["raw_scan"])
+    if "stream_debug" in message and message["stream_debug"] is not None:
+        with st.expander("Captured OpenAI SSE Stream Chunks"):
+            st.json(message["stream_debug"])
     if "document" in message and message["document"] is not None:
         with st.expander("Document extraction metadata"):
             st.json(message["document"])
@@ -415,6 +418,7 @@ def cai_raw_scanapi(
     F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai-chat-sse):
     Sends raw SSE stream with Content-Type: text/event-stream and checks
     the x-ai-security-outcome header ('cleared' vs 'blocked').
+    Returns standard Guardrail scan result structure: {"id": ..., "result": {"outcome": ...}}
     """
     require_env("GUARDRAIL_API_KEY", api_key)
 
@@ -431,20 +435,32 @@ def cai_raw_scanapi(
         )
 
         outcome = resp.headers.get("x-ai-security-outcome", "unknown").lower()
-        scan_id = resp.headers.get("x-ai-security-scan-id", "")
+        scan_id = resp.headers.get("x-ai-security-scan-id") or resp.headers.get("X-Ai-Security-Scan-Id") or ""
 
-        debug_info = {
-            "http_status": resp.status_code,
-            "outcome": outcome,
-            "scan_id": scan_id,
-            "headers": dict(resp.headers),
-            "response_body_preview": resp.text[:500],
+        guardrail_result = {
+            "id": scan_id or None,
+            "result": {
+                "outcome": outcome if resp.ok else "failed",
+                "mode": "out-of-band-streaming",
+                "endpoint": "/backend/v1/scans/raw/openai-chat-sse",
+                "http_status": resp.status_code,
+            },
         }
 
-        return outcome == "cleared", debug_info
+        if not resp.ok:
+            guardrail_result["result"]["error_message"] = resp.text
+
+        return outcome == "cleared", guardrail_result
 
     except Exception as e:
-        return False, {"error": str(e)}
+        return False, {
+            "id": None,
+            "result": {
+                "outcome": "error",
+                "endpoint": "/backend/v1/scans/raw/openai-chat-sse",
+                "error": str(e),
+            },
+        }
 
 
 def llm_chat_stream(
@@ -949,6 +965,12 @@ if chat_submission:
                 sensitive_debug_values,
             )
 
+            stream_debug_data = {
+                "chunks_count": len(raw_chunks),
+                "reassembled_text": response_text,
+                "raw_sse_stream": raw_sse_string,
+            }
+
             if not cleared_out:
                 with st.chat_message("assistant"):
                     st.error("Response blocked due to policy.")
@@ -958,6 +980,7 @@ if chat_submission:
                         "scan_in": redacted_scan_in_json,
                         "scan_out": None,
                         "raw_scan": redacted_raw_scan_json,
+                        "stream_debug": stream_debug_data,
                         "document": document_metadata(extracted_document),
                     }
                     if show_debug:
@@ -971,6 +994,7 @@ if chat_submission:
                 "scan_in": redacted_scan_in_json,
                 "scan_out": None,
                 "raw_scan": redacted_raw_scan_json,
+                "stream_debug": stream_debug_data,
                 "document": document_metadata(extracted_document),
             }
             with st.chat_message("assistant"):
