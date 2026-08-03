@@ -473,7 +473,7 @@ def llm_chat_stream(
     raw_chunks = []
 
     for chunk in stream_response:
-        chunk_dict = chunk.model_dump()
+        chunk_dict = chunk.model_dump(exclude_none=True)
         raw_chunks.append(chunk_dict)
         if chunk.choices and len(chunk.choices) > 0:
             delta = chunk.choices[0].delta
