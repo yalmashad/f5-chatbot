@@ -223,7 +223,11 @@ def render_debug_details(message: dict) -> None:
             st.json(message["raw_scan"])
     if "stream_debug" in message and message["stream_debug"] is not None:
         with st.expander("Captured OpenAI SSE Stream Chunks"):
-            st.json(message["stream_debug"])
+            stream_info = message["stream_debug"]
+            st.markdown(f"**Chunks count**: `{stream_info.get('chunks_count', 0)}`")
+            st.markdown(f"**Reassembled text**: {stream_info.get('reassembled_text', '')}")
+            st.markdown("**Raw SSE stream frames**:")
+            st.code(stream_info.get("raw_sse_stream", ""), language="http")
     if "document" in message and message["document"] is not None:
         with st.expander("Document extraction metadata"):
             st.json(message["document"])
