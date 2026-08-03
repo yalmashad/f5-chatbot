@@ -407,39 +407,41 @@ def chunks_to_openai_chat_sse(raw_chunks: list[dict]) -> str:
 
 
 def cai_raw_scanapi(
-    raw_payload: str | dict | list,
+    raw_sse_string: str,
     api_key: str,
     raw_scan_url: str,
-) -> tuple[bool, dict | None]:
+) -> tuple[bool, dict]:
     """
-    F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai-chat-sse): returns (cleared?, full_json_or_none).
+    F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai-chat-sse):
+    Sends raw SSE stream with Content-Type: text/event-stream and checks
+    the x-ai-security-outcome header ('cleared' vs 'blocked').
     """
     require_env("GUARDRAIL_API_KEY", api_key)
 
     try:
-        body = {"input": raw_payload} if isinstance(raw_payload, str) else raw_payload
         resp = requests.post(
             raw_scan_url,
             headers={
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
+                "Content-Type": "text/event-stream",
             },
-            json=body,
+            data=raw_sse_string,
             timeout=60,
             allow_redirects=False,
         )
 
-        if not resp.ok:
-            return False, {"http_status": resp.status_code, "body": resp.text}
+        outcome = resp.headers.get("x-ai-security-outcome", "unknown").lower()
+        scan_id = resp.headers.get("x-ai-security-scan-id", "")
 
-        data = resp.json()
-        result = data.get("result")
-        if not result:
-            return False, {"error": "Missing 'result' in response", "data": data}
+        debug_info = {
+            "http_status": resp.status_code,
+            "outcome": outcome,
+            "scan_id": scan_id,
+            "headers": dict(resp.headers),
+            "response_body_preview": resp.text[:500],
+        }
 
-        outcome = result.get("outcome", "unknown")
-        return outcome == "cleared", data
+        return outcome == "cleared", debug_info
 
     except Exception as e:
         return False, {"error": str(e)}
