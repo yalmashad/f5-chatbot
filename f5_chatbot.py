@@ -217,6 +217,9 @@ def render_debug_details(message: dict) -> None:
     if "scan_out" in message and message["scan_out"] is not None:
         with st.expander("Guardrail scan - output JSON"):
             st.json(message["scan_out"])
+    if "raw_scan" in message and message["raw_scan"] is not None:
+        with st.expander("Guardrail raw scan - response JSON (/backend/v1/scans/raw/openai)"):
+            st.json(message["raw_scan"])
     if "document" in message and message["document"] is not None:
         with st.expander("Document extraction metadata"):
             st.json(message["document"])
@@ -390,6 +393,81 @@ def llm_chat(
     return completion.choices[0].message.content or ""
 
 
+def cai_raw_scanapi(
+    raw_payload: dict | list,
+    api_key: str,
+    raw_scan_url: str,
+) -> tuple[bool, dict | None]:
+    """
+    F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai): returns (cleared?, full_json_or_none).
+    """
+    require_env("GUARDRAIL_API_KEY", api_key)
+
+    try:
+        resp = requests.post(
+            raw_scan_url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=raw_payload if isinstance(raw_payload, (dict, list)) else {"input": raw_payload},
+            timeout=60,
+            allow_redirects=False,
+        )
+
+        if not resp.ok:
+            return False, {"http_status": resp.status_code, "body": resp.text}
+
+        data = resp.json()
+        result = data.get("result")
+        if not result:
+            return False, {"error": "Missing 'result' in response", "data": data}
+
+        outcome = result.get("outcome", "unknown")
+        return outcome == "cleared", data
+
+    except Exception as e:
+        return False, {"error": str(e)}
+
+
+def llm_chat_stream(
+    prompt: str,
+    settings: dict[str, str],
+    messages: list[dict[str, str]] | None = None,
+) -> tuple[str, list[dict]]:
+    """
+    Calls OpenAI with stream=True, collecting streamed chunks into reassembled text
+    and capturing raw chunk dumps for the Guardrail raw scan API.
+    """
+    client = get_llm_client(settings)
+    model = get_selected_model(settings)
+    chat_messages = messages or [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": prompt},
+    ]
+
+    stream_response = client.chat.completions.create(
+        model=model,
+        messages=chat_messages,
+        stream=True,
+    )
+
+    reassembled_parts = []
+    raw_chunks = []
+
+    for chunk in stream_response:
+        chunk_dict = chunk.model_dump()
+        raw_chunks.append(chunk_dict)
+        if chunk.choices and len(chunk.choices) > 0:
+            delta = chunk.choices[0].delta
+            if delta and delta.content:
+                reassembled_parts.append(delta.content)
+
+    reassembled_text = "".join(reassembled_parts)
+    return reassembled_text, raw_chunks
+
+
 st.set_page_config(page_title="Secure Chatbot", layout="centered")
 st.markdown(
     """
@@ -419,8 +497,17 @@ with st.sidebar:
             index=0,
             help="Inline uses the F5 Guardrail Prompt API. Out-of-band scans before and after the model call.",
         )
+        if guardrail_mode == "Out-of-band":
+            use_raw_stream_scan = st.checkbox(
+                "Use raw streaming scan (/backend/v1/scans/raw/openai)",
+                value=False,
+                help="Streams response chunks from OpenAI and sends the raw stream payload to F5 Guardrail for parsing and inspection.",
+            )
+        else:
+            use_raw_stream_scan = False
     else:
         guardrail_mode = "Disabled"
+        use_raw_stream_scan = False
 
     provider_settings_disabled = guardrail_enabled and guardrail_mode == "Inline"
     if provider_settings_disabled:
@@ -667,6 +754,7 @@ with st.sidebar:
 current_mode = (
     guardrail_enabled,
     guardrail_mode,
+    use_raw_stream_scan,
     settings["model_provider"],
     get_selected_model(settings),
 )
@@ -825,15 +913,94 @@ if chat_submission:
             st.session_state.messages.append(assistant_message)
             st.stop()
 
-        response_text = llm_chat(prompt, settings, messages=document_model_messages)
+        if use_raw_stream_scan:
+            response_text, raw_chunks = llm_chat_stream(
+                prompt, settings, messages=document_model_messages
+            )
+            raw_payload = {
+                "format": "openai",
+                "model": get_selected_model(settings),
+                "chunks_count": len(raw_chunks),
+                "chunks": raw_chunks,
+            }
+            cleared_out, raw_scan_json = cai_raw_scanapi(
+                raw_payload,
+                settings["guardrail_api_key"],
+                settings["guardrail_raw_scan_url"],
+            )
 
-        response_scan_payload = build_model_response_scan_payload(response_text)
-        cleared_out, scan_out_json = cai_scanapi(
-            response_scan_payload,
-            settings["guardrail_api_key"],
-            settings["guardrail_scan_url"],
-        )
-        if not cleared_out:
+            redacted_scan_in_json = redact_sensitive_debug_data(
+                scan_in_json,
+                sensitive_debug_values,
+            )
+            redacted_raw_scan_json = redact_sensitive_debug_data(
+                raw_scan_json,
+                sensitive_debug_values,
+            )
+
+            if not cleared_out:
+                with st.chat_message("assistant"):
+                    st.error("Response blocked due to policy.")
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": "⛔ Response blocked due to policy.",
+                        "scan_in": redacted_scan_in_json,
+                        "scan_out": None,
+                        "raw_scan": redacted_raw_scan_json,
+                        "document": document_metadata(extracted_document),
+                    }
+                    if show_debug:
+                        render_debug_details(assistant_message)
+                st.session_state.messages.append(assistant_message)
+                st.stop()
+
+            assistant_message = {
+                "role": "assistant",
+                "content": response_text,
+                "scan_in": redacted_scan_in_json,
+                "scan_out": None,
+                "raw_scan": redacted_raw_scan_json,
+                "document": document_metadata(extracted_document),
+            }
+            with st.chat_message("assistant"):
+                st.markdown(response_text)
+                if show_debug:
+                    render_debug_details(assistant_message)
+
+            st.session_state.messages.append(assistant_message)
+        else:
+            response_text = llm_chat(prompt, settings, messages=document_model_messages)
+
+            response_scan_payload = build_model_response_scan_payload(response_text)
+            cleared_out, scan_out_json = cai_scanapi(
+                response_scan_payload,
+                settings["guardrail_api_key"],
+                settings["guardrail_scan_url"],
+            )
+            if not cleared_out:
+                redacted_scan_in_json = redact_sensitive_debug_data(
+                    scan_in_json,
+                    sensitive_debug_values,
+                )
+                redacted_scan_out_json = redact_sensitive_debug_data(
+                    scan_out_json,
+                    sensitive_debug_values,
+                )
+                with st.chat_message("assistant"):
+                    st.error("Response blocked due to policy.")
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": "⛔ Response blocked due to policy.",
+                        "scan_in": redacted_scan_in_json,
+                        "scan_out": redacted_scan_out_json,
+                        "raw_scan": None,
+                        "document": document_metadata(extracted_document),
+                    }
+                    if show_debug:
+                        render_debug_details(assistant_message)
+                st.session_state.messages.append(assistant_message)
+                st.stop()
+
             redacted_scan_in_json = redact_sensitive_debug_data(
                 scan_in_json,
                 sensitive_debug_values,
@@ -842,42 +1009,21 @@ if chat_submission:
                 scan_out_json,
                 sensitive_debug_values,
             )
+
+            assistant_message = {
+                "role": "assistant",
+                "content": response_text,
+                "scan_in": redacted_scan_in_json,
+                "scan_out": redacted_scan_out_json,
+                "raw_scan": None,
+                "document": document_metadata(extracted_document),
+            }
             with st.chat_message("assistant"):
-                st.error("Response blocked due to policy.")
-                assistant_message = {
-                    "role": "assistant",
-                    "content": "⛔ Response blocked due to policy.",
-                    "scan_in": redacted_scan_in_json,
-                    "scan_out": redacted_scan_out_json,
-                    "document": document_metadata(extracted_document),
-                }
+                st.markdown(response_text)
                 if show_debug:
                     render_debug_details(assistant_message)
+
             st.session_state.messages.append(assistant_message)
-            st.stop()
-
-        redacted_scan_in_json = redact_sensitive_debug_data(
-            scan_in_json,
-            sensitive_debug_values,
-        )
-        redacted_scan_out_json = redact_sensitive_debug_data(
-            scan_out_json,
-            sensitive_debug_values,
-        )
-
-        assistant_message = {
-            "role": "assistant",
-            "content": response_text,
-            "scan_in": redacted_scan_in_json,
-            "scan_out": redacted_scan_out_json,
-            "document": document_metadata(extracted_document),
-        }
-        with st.chat_message("assistant"):
-            st.markdown(response_text)
-            if show_debug:
-                render_debug_details(assistant_message)
-
-        st.session_state.messages.append(assistant_message)
 
     except Exception as e:
         with st.chat_message("assistant"):

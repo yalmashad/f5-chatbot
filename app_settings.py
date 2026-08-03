@@ -12,6 +12,7 @@ MODEL_PROVIDERS = ("OpenAI", "OpenAI compatible", "Ollama")
 DEFAULT_GUARDRAIL_HOSTNAME = "https://www.us1.calypsoai.app"
 GUARDRAIL_SCAN_PATH = "/backend/v1/scans"
 GUARDRAIL_PROMPT_API_PATH = "/backend/v1/prompts"
+GUARDRAIL_RAW_SCAN_PATH = "/backend/v1/scans/raw/openai"
 
 
 def build_guardrail_url(hostname: str, path: str) -> str:
@@ -119,6 +120,9 @@ def _with_derived_urls(settings: dict[str, str]) -> dict[str, str]:
     )
     updated["guardrail_prompt_api_url"] = build_guardrail_url(
         updated["guardrail_hostname"], GUARDRAIL_PROMPT_API_PATH
+    )
+    updated["guardrail_raw_scan_url"] = build_guardrail_url(
+        updated["guardrail_hostname"], GUARDRAIL_RAW_SCAN_PATH
     )
     return updated
 
