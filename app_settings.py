@@ -12,7 +12,7 @@ MODEL_PROVIDERS = ("OpenAI", "OpenAI compatible", "Ollama")
 DEFAULT_GUARDRAIL_HOSTNAME = "https://www.us1.calypsoai.app"
 GUARDRAIL_SCAN_PATH = "/backend/v1/scans"
 GUARDRAIL_PROMPT_API_PATH = "/backend/v1/prompts"
-GUARDRAIL_RAW_SCAN_PATH = "/backend/v1/scans/raw/openai"
+GUARDRAIL_RAW_SCAN_PATH = "/backend/v1/scans/raw/openai-chat-sse"
 
 
 def build_guardrail_url(hostname: str, path: str) -> str:

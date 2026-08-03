@@ -1,3 +1,4 @@
+import json
 import os
 from dataclasses import dataclass
 from io import BytesIO
@@ -218,7 +219,7 @@ def render_debug_details(message: dict) -> None:
         with st.expander("Guardrail scan - output JSON"):
             st.json(message["scan_out"])
     if "raw_scan" in message and message["raw_scan"] is not None:
-        with st.expander("Guardrail raw scan - response JSON (/backend/v1/scans/raw/openai)"):
+        with st.expander("Guardrail raw scan - response JSON (/backend/v1/scans/raw/openai-chat-sse)"):
             st.json(message["raw_scan"])
     if "document" in message and message["document"] is not None:
         with st.expander("Document extraction metadata"):
@@ -393,17 +394,30 @@ def llm_chat(
     return completion.choices[0].message.content or ""
 
 
+def chunks_to_openai_chat_sse(raw_chunks: list[dict]) -> str:
+    """
+    Converts a list of OpenAI ChatCompletionChunk dictionaries into standard SSE format:
+    data: {"id": ...}\n\ndata: [DONE]\n\n
+    """
+    sse_frames = []
+    for chunk in raw_chunks:
+        sse_frames.append(f"data: {json.dumps(chunk)}")
+    sse_frames.append("data: [DONE]")
+    return "\n\n".join(sse_frames) + "\n\n"
+
+
 def cai_raw_scanapi(
-    raw_payload: dict | list,
+    raw_payload: str | dict | list,
     api_key: str,
     raw_scan_url: str,
 ) -> tuple[bool, dict | None]:
     """
-    F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai): returns (cleared?, full_json_or_none).
+    F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai-chat-sse): returns (cleared?, full_json_or_none).
     """
     require_env("GUARDRAIL_API_KEY", api_key)
 
     try:
+        body = {"input": raw_payload} if isinstance(raw_payload, str) else raw_payload
         resp = requests.post(
             raw_scan_url,
             headers={
@@ -411,7 +425,7 @@ def cai_raw_scanapi(
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
-            json=raw_payload if isinstance(raw_payload, (dict, list)) else {"input": raw_payload},
+            json=body,
             timeout=60,
             allow_redirects=False,
         )
@@ -499,7 +513,7 @@ with st.sidebar:
         )
         if guardrail_mode == "Out-of-band":
             use_raw_stream_scan = st.checkbox(
-                "Use raw streaming scan (/backend/v1/scans/raw/openai)",
+                "Use raw streaming scan (/backend/v1/scans/raw/openai-chat-sse)",
                 value=False,
                 help="Streams response chunks from OpenAI and sends the raw stream payload to F5 Guardrail for parsing and inspection.",
             )
@@ -917,14 +931,9 @@ if chat_submission:
             response_text, raw_chunks = llm_chat_stream(
                 prompt, settings, messages=document_model_messages
             )
-            raw_payload = {
-                "format": "openai",
-                "model": get_selected_model(settings),
-                "chunks_count": len(raw_chunks),
-                "chunks": raw_chunks,
-            }
+            raw_sse_string = chunks_to_openai_chat_sse(raw_chunks)
             cleared_out, raw_scan_json = cai_raw_scanapi(
-                raw_payload,
+                raw_sse_string,
                 settings["guardrail_api_key"],
                 settings["guardrail_raw_scan_url"],
             )
