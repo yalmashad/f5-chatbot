@@ -5,8 +5,8 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      # Change the left side if port 8080 is already in use, for example "8501:8501".
-      - "8080:8501"
+      # Change the left side if port 8501 is already in use, for example "8080:8501".
+      - "8501:8501"
     env_file:
       - path: .env
         required: false
