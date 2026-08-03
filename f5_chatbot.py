@@ -416,9 +416,9 @@ def cai_raw_scanapi(
 ) -> tuple[bool, dict]:
     """
     F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai-chat-sse):
-    Sends raw SSE stream with Content-Type: text/event-stream and checks
-    the x-ai-security-outcome header ('cleared' vs 'blocked').
-    Returns standard Guardrail scan result structure: {"id": ..., "result": {"outcome": ...}}
+    Sends raw SSE stream with Content-Type: text/event-stream, extracts scan_id from
+    x-ai-security-scan-id header, and fetches full detailed scanner results from
+    GET /backend/v1/prompts/{scan_id}.
     """
     require_env("GUARDRAIL_API_KEY", api_key)
 
@@ -435,7 +435,30 @@ def cai_raw_scanapi(
         )
 
         outcome = resp.headers.get("x-ai-security-outcome", "unknown").lower()
-        scan_id = resp.headers.get("x-ai-security-scan-id") or resp.headers.get("X-Ai-Security-Scan-Id") or ""
+        scan_id = (
+            resp.headers.get("x-ai-security-scan-id")
+            or resp.headers.get("X-Ai-Security-Scan-Id")
+            or ""
+        )
+
+        if scan_id:
+            try:
+                hostname = raw_scan_url.split("/backend/v1")[0]
+                details_url = f"{hostname}/backend/v1/prompts/{scan_id}"
+                details_resp = requests.get(
+                    details_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Accept": "application/json",
+                    },
+                    timeout=10,
+                )
+                if details_resp.ok:
+                    data = details_resp.json()
+                    prompt_data = data.get("prompt", data)
+                    return outcome == "cleared", prompt_data
+            except Exception:
+                pass
 
         guardrail_result = {
             "id": scan_id or None,
