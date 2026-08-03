@@ -513,9 +513,9 @@ with st.sidebar:
         )
         if guardrail_mode == "Out-of-band":
             use_raw_stream_scan = st.checkbox(
-                "Use raw streaming scan (/backend/v1/scans/raw/openai-chat-sse)",
+                "Enable streaming scan",
                 value=False,
-                help="Streams response chunks from OpenAI and sends the raw stream payload to F5 Guardrail for parsing and inspection.",
+                help="Streams response chunks from OpenAI and sends the raw stream payload to F5 Guardrail (/backend/v1/scans/raw/openai-chat-sse) for parsing and inspection.",
             )
         else:
             use_raw_stream_scan = False
