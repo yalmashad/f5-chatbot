@@ -67,6 +67,13 @@ def _settings_from_env(env: dict) -> dict[str, str]:
         "CALYPSO_HOSTNAME",
         default=DEFAULT_GUARDRAIL_HOSTNAME,
     ).strip() or DEFAULT_GUARDRAIL_HOSTNAME
+    guardrail_disable_ssl_verify = _first_env(
+        env,
+        "GUARDRAIL_DISABLE_SSL_VERIFY",
+        "DISABLE_SSL_VERIFY",
+        "GUARDRAIL_IGNORE_SSL",
+        default="false",
+    )
 
     settings = {
         "model_provider": provider,
@@ -107,6 +114,7 @@ def _settings_from_env(env: dict) -> dict[str, str]:
             "F5_GUARDRAIL_API_KEY",
         ),
         "guardrail_hostname": guardrail_hostname.rstrip("/"),
+        "guardrail_disable_ssl_verify": guardrail_disable_ssl_verify,
     }
     return _with_derived_urls(settings)
 

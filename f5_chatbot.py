@@ -19,6 +19,7 @@ from app_settings import (
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OPENAI_MODEL_CHOICE,
     DEFAULT_OPENAI_MODEL,
+    _is_truthy,
     clear_session_credentials,
     get_available_model_providers,
     get_selected_model,
@@ -308,11 +309,15 @@ def cai_scanapi(
     text: str,
     api_key: str,
     scan_url: str,
+    verify_ssl: bool = True,
 ) -> tuple[bool, dict | None]:
     """
     F5 Guardrail Scan API: returns (cleared?, full_json_or_none).
     """
     require_env("GUARDRAIL_API_KEY", api_key)
+    if not verify_ssl:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     try:
         resp = requests.post(
@@ -325,6 +330,7 @@ def cai_scanapi(
             json={"input": text},
             timeout=60,
             allow_redirects=False,
+            verify=verify_ssl,
         )
 
         if not resp.ok:
@@ -342,11 +348,19 @@ def cai_scanapi(
         return False, {"error": str(e)}
 
 
-def cai_promptapi(prompt: str, api_key: str, prompt_api_url: str) -> tuple[str | None, dict]:
+def cai_promptapi(
+    prompt: str,
+    api_key: str,
+    prompt_api_url: str,
+    verify_ssl: bool = True,
+) -> tuple[str | None, dict]:
     """
     F5 Guardrail Prompt API (Inline): returns (assistant_text_or_none, full_json).
     """
     require_env("GUARDRAIL_API_KEY", api_key)
+    if not verify_ssl:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -362,6 +376,7 @@ def cai_promptapi(prompt: str, api_key: str, prompt_api_url: str) -> tuple[str |
         json=body,
         timeout=60,
         allow_redirects=False,
+        verify=verify_ssl,
     )
 
     if not resp.ok:
@@ -417,6 +432,7 @@ def cai_raw_scanapi(
     raw_sse_string: str,
     api_key: str,
     raw_scan_url: str,
+    verify_ssl: bool = True,
 ) -> tuple[bool, dict]:
     """
     F5 Guardrail Raw Scan API (/backend/v1/scans/raw/openai-chat-sse):
@@ -425,6 +441,9 @@ def cai_raw_scanapi(
     GET /backend/v1/prompts/{scan_id}.
     """
     require_env("GUARDRAIL_API_KEY", api_key)
+    if not verify_ssl:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     try:
         resp = requests.post(
@@ -436,6 +455,7 @@ def cai_raw_scanapi(
             data=raw_sse_string,
             timeout=60,
             allow_redirects=False,
+            verify=verify_ssl,
         )
 
         outcome = resp.headers.get("x-ai-security-outcome", "unknown").lower()
@@ -456,6 +476,7 @@ def cai_raw_scanapi(
                         "Accept": "application/json",
                     },
                     timeout=10,
+                    verify=verify_ssl,
                 )
                 if details_resp.ok:
                     data = details_resp.json()
@@ -741,7 +762,7 @@ with st.sidebar:
                 guardrail_hostname = st.text_input(
                     "Guardrail Hostname",
                     value=settings["guardrail_hostname"],
-                    help="Example: https://www.us1.calypsoai.app",
+                    help="Example: https://www.us1.calypsoai.app or https://guardrails.f5demo.io",
                 )
                 guardrail_api_key = st.text_input(
                     "F5 Guardrail API key",
@@ -753,6 +774,11 @@ with st.sidebar:
                     ),
                     type="password",
                     help="Leave blank to keep the current session value.",
+                )
+                guardrail_disable_ssl_verify = st.checkbox(
+                    "Disable SSL verification",
+                    value=_is_truthy(settings.get("guardrail_disable_ssl_verify")),
+                    help="Ignore SSL certificate validation errors (useful for self-signed certificates in lab/demo environments like guardrails.f5demo.io).",
                 )
 
             submitted = st.button("Save settings")
@@ -787,6 +813,9 @@ with st.sidebar:
                     guardrail_api_key.strip() or settings["guardrail_api_key"]
                 ),
                 "guardrail_hostname": guardrail_hostname.strip() or DEFAULT_GUARDRAIL_HOSTNAME,
+                "guardrail_disable_ssl_verify": "true"
+                if guardrail_disable_ssl_verify
+                else "false",
             }
             settings = update_session_settings(st.session_state, updated_settings)
             st.success("Settings saved for this browser session")
@@ -916,12 +945,15 @@ if chat_submission:
                 st.error(get_model_error_hint(e, settings) or f"Model call failed: {e}")
         st.stop()
 
+    verify_ssl = not _is_truthy(settings.get("guardrail_disable_ssl_verify"))
+
     if guardrail_mode == "Inline":
         try:
             assistant_text, cai_json = cai_promptapi(
                 document_inspection_payload,
                 settings["guardrail_api_key"],
                 settings["guardrail_prompt_api_url"],
+                verify_ssl=verify_ssl,
             )
         except Exception as e:
             assistant_text, cai_json = None, {"error": str(e)}
@@ -952,6 +984,7 @@ if chat_submission:
             document_inspection_payload,
             settings["guardrail_api_key"],
             settings["guardrail_scan_url"],
+            verify_ssl=verify_ssl,
         )
         if not cleared_in:
             redacted_scan_in_json = redact_sensitive_debug_data(
@@ -981,6 +1014,7 @@ if chat_submission:
                 raw_sse_string,
                 settings["guardrail_api_key"],
                 settings["guardrail_raw_scan_url"],
+                verify_ssl=verify_ssl,
             )
 
             redacted_scan_in_json = redact_sensitive_debug_data(
@@ -1038,6 +1072,7 @@ if chat_submission:
                 response_scan_payload,
                 settings["guardrail_api_key"],
                 settings["guardrail_scan_url"],
+                verify_ssl=verify_ssl,
             )
             if not cleared_out:
                 redacted_scan_in_json = redact_sensitive_debug_data(

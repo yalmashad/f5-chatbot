@@ -55,6 +55,7 @@ OLLAMA_MODEL=llama3.2
 
 GUARDRAIL_HOSTNAME=https://www.us1.calypsoai.app
 GUARDRAIL_API_KEY=
+GUARDRAIL_DISABLE_SSL_VERIFY=false
 ```
 
 Values entered in the UI are kept only for the current browser session and are not written back to `.env`.
