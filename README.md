@@ -10,6 +10,7 @@ F5 Secure Chatbot is a lightweight chat portal for trying prompts and document u
 
 - OpenAI, OpenAI-compatible, and optional Ollama model providers
 - F5 Guardrail inline and out-of-band protection modes
+- Out-of-band raw streaming scan support (`/backend/v1/scans/raw/openai-chat-sse`)
 - PDF and DOCX upload support
 - Session-only credential entry from the UI
 - Docker Compose deployment with simple `.env` configuration
@@ -113,6 +114,17 @@ When running the app in Docker and Ollama on the host machine, use:
 ```env
 OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
 ```
+
+## Streaming Scan
+
+F5 Secure Chatbot supports scanning LLM responses received as an OpenAI SSE stream:
+
+- **Overview**: Streams completion chunks from the LLM, serializes them into standard Server-Sent Events (`data: <json>\n\ndata: [DONE]`), and sends the raw stream payload to F5 Guardrail (`/backend/v1/scans/raw/openai-chat-sse`) for security policy inspection.
+- **How to use**:
+  1. In the sidebar under **Guardrail settings**, select **Out-of-band** mode.
+  2. Check **Enable streaming scan**.
+  3. Send a prompt.
+  4. Enable **Show debug details** to inspect captured OpenAI stream chunks and detailed F5 Guardrail scanner results.
 
 ## Notes
 
